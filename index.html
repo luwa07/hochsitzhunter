@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="format-detection" content="telephone=no">
+    
+    <title>HochsitzHunter</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        /* --- BASIS STYLES (Mobile First) --- */
+        body, html {
+            margin: 0; padding: 0; height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #000000;
+            color: #f5f5f5;
+            overflow: hidden;
+            padding-top: env(safe-area-inset-top);
+            padding-bottom: env(safe-area-inset-bottom);
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        :root {
+            --primary: #4a6741; --accent: #d4a373; --accent-light: #f2d0a9;
+            --edit: #3498db; --delete: #c0392b;
+            --dark: #121212; --dark-medium: #1e1e1e;
+        }
+
+        /* --- LANDING PAGE --- */
+        #landingPage {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle at center, #1a1a1a 0%, #000000 100%);
+            z-index: 9999; overflow-y: auto; transition: opacity 0.6s ease-in-out;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .landing-container {
+            width: 100%; min-height: 100%; display: flex; flex-direction: column;
+        }
+
+        .hero-image-container {
+            position: relative; width: 100%; z-index: 0; margin-bottom: -80px;
+        }
+
+        .hero-image {
+            width: 100%; height: auto; display: block;
+            border-radius: 0 0 40px 40px;
+            mask-image: linear-gradient(to bottom, black 50%, transparent 100%);
+            -webkit-mask-image: linear-gradient(to bottom, black 50%, transparent 100%);
+        }
+
+        .landing-content-wrapper {
+            position: relative; z-index: 1;
+            padding: 20px 30px 40px 30px;
+            text-align: center;
+            max-width: 600px; margin: 0 auto;
+        }
+
+        .landing-logo { font-size: 4rem; display: inline-block; margin-bottom: 0; }
+        
+        .landing-title { 
+            font-size: 2.8rem; text-transform: uppercase; font-weight: 900; letter-spacing: 3px; margin: 0 0 20px 0; 
+            background: linear-gradient(45deg, var(--accent), #ffffff); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            display: inline-block;
+        }
+
+        .rules-box {
+            background: rgba(40, 40, 40, 0.75);
+            backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px);
+            border-radius: 24px; padding: 30px;
+            text-align: left; margin-bottom: 25px; 
+            border: 1px solid rgba(255,255,255,0.15);
+        }
+        .rules-box h3 { color: var(--accent); margin-top: 0; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-bottom: 15px; }
+        .rules-box ul { padding-left: 20px; margin: 0; }
+        .rules-box li { margin-bottom: 10px; color: #e0e0e0; line-height: 1.4; }
+
+        .welcome-msg {
+            margin-bottom: 30px; font-size: 1.1rem; color: #ccc; font-weight: 500; line-height: 1.5;
+        }
+        .welcome-highlight {
+            color: var(--accent); font-weight: 800; display: block; margin-top: 5px; font-size: 1.2rem;
+        }
+
+        #startHuntingBtn {
+            background: linear-gradient(45deg, var(--accent), var(--accent-light));
+            color: #000; font-size: 1.3rem; font-weight: 800;
+            padding: 20px 40px; border: none; border-radius: 50px; cursor: pointer;
+            text-transform: uppercase; letter-spacing: 2px; width: 100%;
+            box-shadow: 0 10px 30px rgba(212, 163, 115, 0.4); margin-bottom: 50px;
+            transition: all 0.3s ease;
+        }
+        #startHuntingBtn:active { transform: scale(0.96); }
+
+        /* --- UI HEADER --- */
+        header {
+            position: absolute; top: calc(20px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+            z-index: 1000; background: rgba(20,20,20,0.85); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+            padding: 12px 30px; border-radius: 50px; border: 1px solid rgba(255,255,255,0.15);
+            display: flex; align-items: center; gap: 10px;
+            opacity: 0; pointer-events: none; transition: opacity 0.8s;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+        }
+        header.visible { opacity: 1; pointer-events: auto; }
+        h1.header-title { margin: 0; font-size: 1.1rem; text-transform: uppercase; font-weight: 800; color: white; letter-spacing: 1px; }
+
+        #map { height: 100%; width: 100%; z-index: 1; }
+
+        /* --- MODAL (Basis Mobile) --- */
+        #entryModal {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); z-index: 2000; display: none;
+            justify-content: center; align-items: flex-end; /* Mobile: Unten */
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+        }
+
+        .modal-content {
+            background: var(--dark-medium); width: 100%; max-width: 500px;
+            border-radius: 30px 30px 0 0; /* Mobile: Nur oben rund */
+            padding: 30px; padding-bottom: calc(30px + env(safe-area-inset-bottom));
+            max-height: 85vh; overflow-y: auto;
+            position: relative;
+            box-shadow: 0 -10px 40px rgba(0,0,0,0.6);
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .close-btn { 
+            position: absolute; top: 20px; right: 20px; 
+            background: rgba(255,255,255,0.1); width: 36px; height: 36px; 
+            display: flex; justify-content: center; align-items: center; border-radius: 50%; font-size: 20px; cursor: pointer; color: var(--accent); 
+        }
+
+        /* Form Elements iOS Optimized */
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 8px; font-size: 0.9rem; color: #aaa; font-weight: 600; }
+        input, select {
+            font-size: 16px !important; width: 100%; padding: 14px; 
+            background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.1); 
+            border-radius: 12px; color: white; box-sizing: border-box; -webkit-appearance: none;
+        }
+        input:focus { outline: none; border-color: var(--accent); background: rgba(255,255,255,0.12); }
+        .row-group { display: flex; gap: 12px; } .row-group .form-group { flex: 1; }
+        
+        button.save-btn {
+            background: var(--primary); color: white; width: 100%; padding: 18px;
+            border: none; border-radius: 16px; font-weight: 800; cursor: pointer; margin-top: 15px;
+            font-size: 1.1rem;
+            transition: background 0.2s;
+        }
+
+        /* --- DESKTOP OPTIMIERUNGEN (Media Queries) --- */
+        @media (min-width: 1024px) {
+            .landing-container {
+                flex-direction: row; align-items: center; justify-content: center;
+                max-width: 1200px; margin: 0 auto; padding: 40px;
+            }
+            .hero-image-container {
+                flex: 1; margin-bottom: 0; padding-right: 40px; max-width: 500px;
+            }
+            .hero-image {
+                border-radius: 30px; mask-image: none; -webkit-mask-image: none; 
+                box-shadow: 0 20px 60px rgba(0,0,0,0.6); border: 2px solid rgba(255,255,255,0.1);
+            }
+            .landing-content-wrapper { flex: 1; text-align: left; padding: 0; }
+            .landing-title { font-size: 3.5rem; }
+            #startHuntingBtn { width: auto; padding: 20px 60px; }
+            #startHuntingBtn:hover { transform: translateY(-5px); box-shadow: 0 15px 40px rgba(212, 163, 115, 0.6); }
+            #entryModal { align-items: center; }
+            .modal-content {
+                border-radius: 20px; max-width: 450px;
+                box-shadow: 0 30px 80px rgba(0,0,0,0.8); border: 1px solid rgba(255,255,255,0.1);
+                padding-bottom: 30px;
+            }
+            ::-webkit-scrollbar { width: 8px; }
+            ::-webkit-scrollbar-track { background: #121212; }
+            ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+            ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+            button.save-btn:hover { background: #5c8051; }
+            .close-btn:hover { background: rgba(255,255,255,0.2); }
+        }
+
+        /* --- GALERIE IM POPUP --- */
+        .gallery-container {
+            display: flex; overflow-x: auto; scroll-snap-type: x mandatory;
+            width: 100%; height: 200px; background: #000;
+            border-bottom: 3px solid var(--accent); margin-bottom: 10px;
+            scrollbar-width: none;
+        }
+        .gallery-container::-webkit-scrollbar { display: none; }
+
+        .gallery-item {
+            flex: 0 0 100%; width: 100%; height: 100%;
+            object-fit: cover; scroll-snap-align: center;
+        }
+
+        .gallery-indicator {
+            text-align: center; font-size: 0.75rem; color: #888; margin-top: -5px; margin-bottom: 10px;
+        }
+
+        /* --- POPUP STYLES --- */
+        .leaflet-popup-content-wrapper { background: var(--dark-medium); color: #f5f5f5; border-radius: 12px; padding: 0; overflow: hidden; }
+        .leaflet-popup-content { margin: 0; width: 280px !important; }
+        .leaflet-popup-tip { background: var(--dark-medium); }
+        .popup-info { padding: 15px; }
+        .popup-btn { flex: 1; border: none; padding: 10px; border-radius: 8px; cursor: pointer; color: white; font-weight: bold; font-size: 0.9rem; }
+        .btn-edit { background: var(--edit); } .btn-edit:hover { background: #2980b9; }
+        .btn-delete { background: var(--delete); } .btn-delete:hover { background: #a93226; }
+        .popup-actions { display: flex; gap: 8px; margin-top: 15px; }
+        .svg-icon-marker { filter: drop-shadow(0 0 5px rgba(255,255,255,0.5)); }
+        .leaflet-control-zoom { margin-bottom: calc(20px + env(safe-area-inset-bottom)) !important; margin-right: 20px !important; }
+
+    </style>
+</head>
+<body>
+
+    <div id="landingPage">
+        <div class="landing-container">
+            <div class="hero-image-container">
+                <img src="Startbild.png" alt="Hunter Crew" class="hero-image">
+            </div>
+            <div class="landing-content-wrapper">
+                <div class="landing-logo">🦌</div>
+                <h1 class="landing-title">HochsitzHunter</h1>
+                <div class="rules-box">
+                    <h3>📜 Die Regeln</h3>
+                    <ul>
+                        <li>Such einen Spot und trage ihn in deiner App ein.</li> 
+                        <li>Datum, Uhrzeit & Foto sind Pflicht.</li>
+                        <li>Pflicht am Spot: Ein ganzer Joint. 🍁💨</li>
+                        <li>Verlasse den Ort sauberer als du ihn fandest.</li>
+                    </ul>
+                </div>
+                <div class="welcome-msg">
+                    Viel Spaß auf der Pirsch & fette Beute! 🌿🔭
+                    <span class="welcome-highlight">— Luwa & Jona</span>
+                </div>
+                <button id="startHuntingBtn">Jagd beginnen</button>
+            </div>
+        </div>
+    </div>
+
+    <header id="appHeader">
+        <span style="font-size: 1.5rem;">🦌</span>
+        <h1 class="header-title">HochsitzHunter</h1>
+    </header>
+
+    <div id="map"></div>
+    
+    <div id="entryModal">
+        <div class="modal-content">
+            <div style="width: 40px; height: 5px; background: rgba(255,255,255,0.2); border-radius: 10px; margin: 0 auto 20px auto; opacity: 0.5;"></div>
+            <span class="close-btn" onclick="closeModal()">&times;</span>
+            <h2 id="modalTitle" style="color: var(--accent); margin-top:0; text-align:center;">Neuer Spot</h2>
+            
+            <form id="hunterForm">
+                <input type="hidden" id="lat"><input type="hidden" id="lng">
+
+                <div class="form-group">
+                    <label>Name des Spots</label>
+                    <input type="text" id="name" placeholder="Name..." required>
+                </div>
+
+                <div class="row-group">
+                    <div class="form-group"><label>Datum</label><input type="date" id="date_visit" required></div>
+                    <div class="form-group"><label>Uhrzeit</label><input type="time" id="time_visit" required></div>
+                </div>
+
+                <div class="row-group">
+                    <div class="form-group"><label>Aussehen (1-10)</label><input type="number" id="rating_looks" min="1" max="10" required></div>
+                    <div class="form-group"><label>Bequemlichkeit (1-10)</label><input type="number" id="rating_comfort" min="1" max="10" required></div>
+                </div>
+                
+                <div class="row-group">
+                    <div class="form-group"><label>Aussicht (1-10)</label><input type="number" id="rating_view" min="1" max="10" required></div>
+                    <div class="form-group"><label style="color:#ff6b6b; font-weight:bold;">Fickbarkeit (1-10)</label><input type="number" id="rating_special" min="1" max="10" required></div>
+                </div>
+
+                <div class="form-group">
+                    <label>Lied</label>
+                    <input type="text" id="song" placeholder="Interpret - Titel">
+                </div>
+                
+                <div class="form-group">
+                    <label>Beweisfotos/Videos (Mehrere möglich)</label>
+                    <input type="file" id="photo" accept="image/*,video/*" multiple>
+                    <div style="font-size:0.75rem; color:#666; margin-top:5px;">⚠️ Fotos werden komprimiert. Videos kurz halten!</div>
+                </div>
+
+                <button type="submit" class="save-btn" id="saveBtnText">SPEICHERN</button>
+                <div style="height: 20px;"></div>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        const svgIconString = encodeURIComponent(`
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="44" height="44">
+            <circle cx="256" cy="256" r="240" fill="rgba(255,255,255,0.2)" stroke="#fff" stroke-width="20"/>
+            <circle cx="256" cy="256" r="100" fill="none" stroke="#d4a373" stroke-width="40"/>
+            <line x1="256" y1="50" x2="256" y2="462" stroke="#d4a373" stroke-width="40"/>
+            <line x1="50" y1="256" x2="462" y2="256" stroke="#d4a373" stroke-width="40"/>
+            <circle cx="256" cy="256" r="25" fill="#ff4500"/>
+        </svg>`);
+
+        let currentEditId = null; 
+        const landingPage = document.getElementById('landingPage');
+        const startBtn = document.getElementById('startHuntingBtn');
+        const appHeader = document.getElementById('appHeader');
+
+        startBtn.addEventListener('click', () => {
+            landingPage.style.opacity = '0';
+            appHeader.classList.add('visible');
+            setTimeout(() => { landingPage.style.display = 'none'; map.invalidateSize(); }, 600);
+        });
+
+        const brightLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap', maxZoom: 19 });
+        const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: '&copy; Esri', maxZoom: 18 });
+
+        var map = L.map('map', { center: [51.1657, 10.4515], zoom: 6, layers: [brightLayer], zoomControl: false });
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+        map.locate({setView: true, maxZoom: 16});
+
+        map.on('zoomend', function() {
+            if (map.getZoom() > 15) {
+                if (!map.hasLayer(satelliteLayer)) { map.removeLayer(brightLayer); map.addLayer(satelliteLayer); }
+            } else {
+                if (!map.hasLayer(brightLayer)) { map.removeLayer(satelliteLayer); map.addLayer(brightLayer); }
+            }
+        });
+
+        var hunterIcon = L.icon({
+            iconUrl: 'data:image/svg+xml;charset=utf-8,' + svgIconString,
+            iconSize: [44, 44], iconAnchor: [22, 22], popupAnchor: [0, -22], className: 'svg-icon-marker'
+        });
+
+        const modal = document.getElementById('entryModal');
+        const form = document.getElementById('hunterForm');
+        const modalTitle = document.getElementById('modalTitle');
+        const saveBtnText = document.getElementById('saveBtnText');
+
+        function closeModal() { modal.style.display = 'none'; currentEditId = null; }
+
+        map.on('click', function(e) {
+            currentEditId = null;
+            modalTitle.innerText = "Neuer Spot";
+            saveBtnText.innerText = "SPEICHERN";
+            document.getElementById('lat').value = e.latlng.lat;
+            document.getElementById('lng').value = e.latlng.lng;
+            form.reset();
+            const now = new Date();
+            const offset = now.getTimezoneOffset() * 60000;
+            const localISOTime = (new Date(now - offset)).toISOString().slice(0, -1);
+            document.getElementById('date_visit').value = localISOTime.split('T')[0];
+            document.getElementById('time_visit').value = localISOTime.split('T')[1].substring(0,5);
+            modal.style.display = 'flex';
+        });
+
+        loadSpots();
+
+        // --- MEDIEN VERARBEITUNG ---
+        function processFile(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const result = e.target.result;
+                    
+                    // Wenn es ein Bild ist -> Komprimieren
+                    if (file.type.startsWith('image')) {
+                        const img = new Image();
+                        img.onload = () => {
+                            const canvas = document.createElement('canvas');
+                            const ctx = canvas.getContext('2d');
+                            const MAX_WIDTH = 800;
+                            const MAX_HEIGHT = 800;
+                            let width = img.width;
+                            let height = img.height;
+                            if (width > height) {
+                                if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+                            } else {
+                                if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
+                            }
+                            canvas.width = width;
+                            canvas.height = height;
+                            ctx.drawImage(img, 0, 0, width, height);
+                            resolve(canvas.toDataURL('image/jpeg', 0.7));
+                        };
+                        img.src = result;
+                    } 
+                    // Wenn es ein Video ist -> Direkt speichern (ACHTUNG: Größengefahr!)
+                    else if (file.type.startsWith('video')) {
+                        // Warnung bei großen Dateien (> 10MB)
+                        if (file.size > 10 * 1024 * 1024) {
+                            alert("Das Video '" + file.name + "' ist zu groß (>10MB) und wurde übersprungen.");
+                            resolve(null); // Überspringen
+                        } else {
+                            resolve(result); // Video als DataURL (Vorsicht, frisst Speicher)
+                        }
+                    } else {
+                        resolve(null);
+                    }
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            saveBtnText.innerText = "SPEICHERT...";
+
+            const spotData = {
+                lat: document.getElementById('lat').value,
+                lng: document.getElementById('lng').value,
+                name: document.getElementById('name').value,
+                date: document.getElementById('date_visit').value,
+                time: document.getElementById('time_visit').value,
+                looks: document.getElementById('rating_looks').value,
+                comfort: document.getElementById('rating_comfort').value,
+                view: document.getElementById('rating_view').value,
+                special: document.getElementById('rating_special').value,
+                song: document.getElementById('song').value,
+                images: [] 
+            };
+
+            const fileInput = document.getElementById('photo');
+            if (fileInput.files && fileInput.files.length > 0) {
+                const processingPromises = Array.from(fileInput.files).map(file => processFile(file));
+                try {
+                    const results = await Promise.all(processingPromises);
+                    // Filtern von null Werten (übersprungene Dateien)
+                    spotData.images = results.filter(item => item !== null);
+                    finalizeSave(spotData);
+                } catch (err) {
+                    alert("Fehler beim Medien laden.");
+                    finalizeSave(spotData);
+                }
+            } else {
+                finalizeSave(spotData);
+            }
+        });
+
+        function finalizeSave(newSpotData) {
+            let spots = JSON.parse(localStorage.getItem('hochsitz_spots')) || [];
+            if (currentEditId) {
+                const index = spots.findIndex(s => s.id === currentEditId);
+                if (index !== -1) {
+                    newSpotData.id = currentEditId;
+                    if (newSpotData.images.length === 0) {
+                        newSpotData.images = spots[index].images || (spots[index].image ? [spots[index].image] : []);
+                    }
+                    spots[index] = newSpotData;
+                }
+            } else {
+                newSpotData.id = Date.now();
+                spots.push(newSpotData);
+            }
+            try {
+                localStorage.setItem('hochsitz_spots', JSON.stringify(spots));
+            } catch (e) {
+                alert("Speicher voll! Lösche alte Spots.");
+            }
+            map.eachLayer((layer) => { if (layer instanceof L.Marker) layer.remove(); });
+            loadSpots();
+            closeModal();
+        }
+
+        function loadSpots() {
+            let spots = JSON.parse(localStorage.getItem('hochsitz_spots')) || [];
+            spots.forEach(spot => addMarkerToMap(spot));
+        }
+
+        window.editSpot = function(id) {
+            let spots = JSON.parse(localStorage.getItem('hochsitz_spots')) || [];
+            const spot = spots.find(s => s.id === id);
+            if (spot) {
+                currentEditId = id;
+                document.getElementById('lat').value = spot.lat;
+                document.getElementById('lng').value = spot.lng;
+                document.getElementById('name').value = spot.name;
+                document.getElementById('date_visit').value = spot.date;
+                document.getElementById('time_visit').value = spot.time;
+                document.getElementById('rating_looks').value = spot.looks;
+                document.getElementById('rating_comfort').value = spot.comfort;
+                document.getElementById('rating_view').value = spot.view;
+                document.getElementById('rating_special').value = spot.special;
+                document.getElementById('song').value = spot.song;
+                
+                modalTitle.innerText = "Spot bearbeiten";
+                saveBtnText.innerText = "UPDATE";
+                document.getElementById('photo').value = "";
+                map.closePopup();
+                modal.style.display = 'flex';
+            }
+        }
+
+        function addMarkerToMap(spot) {
+            let niceDate = spot.date ? spot.date.split('-').reverse().join('.') : '-';
+            let images = spot.images || (spot.image ? [spot.image] : []);
+            let galleryHTML = '';
+            
+            if (images.length > 0) {
+                galleryHTML = '<div class="gallery-container">';
+                images.forEach(data => {
+                    // Check ob Bild oder Video anhand des Data Strings
+                    if (data.startsWith('data:video')) {
+                        galleryHTML += `<video src="${data}" class="gallery-item" controls playsinline style="object-fit:contain; background:black;"></video>`;
+                    } else {
+                        galleryHTML += `<img src="${data}" class="gallery-item">`;
+                    }
+                });
+                galleryHTML += '</div>';
+                if(images.length > 1) {
+                    galleryHTML += '<div class="gallery-indicator">Swipe für mehr Bilder ↔</div>';
+                }
+            } else {
+                galleryHTML = `<div style="height:60px; background:#333; display:flex; align-items:center; justify-content:center; color:#555; border-bottom:2px solid var(--accent);">Kein Foto</div>`;
+            }
+
+            const popupContent = `
+                ${galleryHTML}
+                <div class="popup-info">
+                    <h3 style="margin:0 0 5px 0; color:#d4a373;">${spot.name}</h3>
+                    <div style="font-size:0.8rem; color:#aaa; margin-bottom:10px;">📅 ${niceDate} | ⌚ ${spot.time}</div>
+                    
+                    <div style="display:flex; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,0.1); margin-bottom:2px;"><span>Aussehen:</span> <b>${spot.looks}/10</b></div>
+                    <div style="display:flex; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,0.1); margin-bottom:2px;"><span>Bequemlichkeit:</span> <b>${spot.comfort}/10</b></div>
+                    <div style="display:flex; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,0.1); margin-bottom:2px;"><span>Aussicht:</span> <b>${spot.view}/10</b></div>
+                    <div style="display:flex; justify-content:space-between; color:#ff6b6b; font-weight:bold;"><span>Fickbarkeit:</span> <b>${spot.special}/10</b></div>
+                    
+                    ${spot.song ? `<div style="font-style:italic; font-size:0.8rem; margin-top:10px; color:#ccc;">🎵 ${spot.song}</div>` : ''}
+                    <div class="popup-actions">
+                        <button onclick="editSpot(${spot.id})" class="popup-btn btn-edit">BEARBEITEN</button>
+                        <button onclick="deleteSpot(${spot.id})" class="popup-btn btn-delete">LÖSCHEN</button>
+                    </div>
+                </div>`;
+            L.marker([spot.lat, spot.lng], {icon: hunterIcon}).addTo(map).bindPopup(popupContent, {maxWidth: 280});
+        }
+
+        window.deleteSpot = function(id) {
+            if(confirm("Löschen?")) {
+                let spots = JSON.parse(localStorage.getItem('hochsitz_spots')) || [];
+                spots = spots.filter(s => s.id !== id);
+                localStorage.setItem('hochsitz_spots', JSON.stringify(spots));
+                map.eachLayer((layer) => { if (layer instanceof L.Marker) layer.remove(); });
+                loadSpots();
+            }
+        }
+    </script>
+</body>
+</html>
